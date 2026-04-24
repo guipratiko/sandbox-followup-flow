@@ -69,12 +69,35 @@ export async function evolutionSend(instanceName: string, number: string, payloa
     throw new Error('Payload de envio vazio.');
   }
 
-  const res = await c.post(path, body);
+  let res;
+  try {
+    res = await c.post(path, body);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes('Invalid URL')) {
+      throw new Error(
+        'URL da Evolution inválida (EVOLUTION_API_BASE_URL). Use URL absoluta, ex.: https://sua-api.com'
+      );
+    }
+    throw e;
+  }
   if (res.status >= 400) {
-    const msg =
-      (res.data && typeof res.data === 'object' && (res.data as { message?: string }).message) ||
-      `Evolution HTTP ${res.status}`;
-    throw new Error(String(msg));
+    const d = res.data;
+    let msg = `Evolution HTTP ${res.status}`;
+    if (d && typeof d === 'object') {
+      const o = d as Record<string, unknown>;
+      if (typeof o.message === 'string') msg = o.message;
+      else if (Array.isArray(o.message)) msg = o.message.map(String).join(' ');
+      else if (o.response && typeof o.response === 'object') {
+        const r = o.response as Record<string, unknown>;
+        if (Array.isArray(r.message)) msg = r.message.map(String).join(' ');
+        else if (typeof r.message === 'string') msg = r.message;
+      }
+    }
+    if (res.status === 404) {
+      msg += ` (instância «${instanceName}» — na Evolution use o nome interno da instância, não o nome de exibição)`;
+    }
+    throw new Error(msg.slice(0, 2000));
   }
   return res.data;
 }

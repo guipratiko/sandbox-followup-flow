@@ -10,12 +10,30 @@ function parseOrigins(raw: string | undefined): string[] {
     .filter(Boolean);
 }
 
+/**
+ * URL absoluta para o cliente HTTP da Evolution. Host sem esquema vira https://
+ * (axios lança "Invalid URL" se faltar protocolo).
+ */
+function normalizeEvolutionBaseUrl(raw: string): string {
+  const trimmed = raw.trim().replace(/\/$/, '');
+  if (!trimmed) return '';
+  const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const u = new URL(withScheme);
+    if (!u.hostname) return '';
+    const path = u.pathname === '/' ? '' : u.pathname.replace(/\/$/, '');
+    return `${u.origin}${path}`;
+  } catch {
+    return '';
+  }
+}
+
 export const env = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: Number(process.env.PORT) || 4337,
   postgresUri: (process.env.POSTGRES_URI || '').trim(),
   jwtSecret: (process.env.JWT_SECRET || '').trim(),
-  evolutionBaseUrl: (process.env.EVOLUTION_API_BASE_URL || '').replace(/\/$/, ''),
+  evolutionBaseUrl: normalizeEvolutionBaseUrl(process.env.EVOLUTION_API_BASE_URL || ''),
   evolutionApiKey: (process.env.EVOLUTION_API_KEY || '').trim(),
   evolutionInsecureTls: process.env.EVOLUTION_INSECURE_TLS === 'true',
   corsOrigins: parseOrigins(process.env.CORS_ORIGINS),
