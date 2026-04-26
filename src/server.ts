@@ -2,6 +2,7 @@ import express, { Router } from 'express';
 import cors from 'cors';
 import { env } from './config/env';
 import healthRoutes from './routes/health';
+import publicStatusRoutes from './routes/publicStatus';
 import sequencesRoutes from './routes/sequences';
 import { errorHandler } from './middleware/errorHandler';
 import { startFollowupWorker, processDueFollowupSteps } from './worker';
@@ -52,6 +53,7 @@ app.use(
 
 const api = Router();
 api.use('/followup-flow', sequencesRoutes);
+api.use('/public', publicStatusRoutes);
 
 app.use('/api', api);
 app.use('/', healthRoutes);
