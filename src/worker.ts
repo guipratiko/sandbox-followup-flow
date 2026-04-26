@@ -1,4 +1,5 @@
 import { getPool } from './db/pool';
+import { mirrorFollowupOutboundToMessages } from './services/crmMirrorOutbound';
 import { buildPayloadFromStep, evolutionSend, extractMessageId } from './services/evolutionSend';
 
 const ALLOWED_INTEGRATIONS = new Set<string | null | undefined>([null, undefined, '', 'WHATSAPP-BAILEYS', 'evolution']);
@@ -27,6 +28,9 @@ async function claimOneStep(): Promise<{
   instance_name: string;
   remote_jid: string;
   instance_integration: string | null;
+  user_id: string;
+  contact_id: string;
+  instance_id: string;
 } | null> {
   const pool = getPool();
   const { rows } = await pool.query<{
@@ -37,10 +41,14 @@ async function claimOneStep(): Promise<{
     instance_name: string;
     remote_jid: string;
     instance_integration: string | null;
+    user_id: string;
+    contact_id: string;
+    instance_id: string;
   }>(
     `WITH picked AS (
        SELECT s.id AS step_id, s.sequence_id, s.message_type, s.payload,
-              seq.instance_name, seq.remote_jid, seq.instance_integration
+              seq.instance_name, seq.remote_jid, seq.instance_integration,
+              seq.user_id::text AS user_id, seq.contact_id::text AS contact_id, seq.instance_id::text AS instance_id
        FROM crm_followup_steps s
        INNER JOIN crm_followup_sequences seq ON seq.id = s.sequence_id
        WHERE s.status = 'pending'
@@ -55,7 +63,8 @@ async function claimOneStep(): Promise<{
      FROM picked
      WHERE s.id = picked.step_id
      RETURNING s.id AS step_id, picked.sequence_id, picked.message_type, picked.payload,
-               picked.instance_name, picked.remote_jid, picked.instance_integration`
+               picked.instance_name, picked.remote_jid, picked.instance_integration,
+               picked.user_id, picked.contact_id, picked.instance_id`
   );
   return rows[0] ?? null;
 }
@@ -82,6 +91,25 @@ export async function processDueFollowupSteps(): Promise<void> {
       const sendPayload = buildPayloadFromStep(row.message_type, row.payload);
       const raw = await evolutionSend(row.instance_name, row.remote_jid, sendPayload);
       const mid = extractMessageId(raw);
+      if (mid) {
+        try {
+          await mirrorFollowupOutboundToMessages({
+            pool,
+            userId: row.user_id,
+            instanceId: row.instance_id,
+            contactId: row.contact_id,
+            remoteJid: row.remote_jid,
+            evolutionMessageId: mid,
+            followupMessageType: row.message_type,
+            payload: row.payload,
+          });
+        } catch (mirrorErr) {
+          console.error(
+            '[followup-flow] Espelho CRM messages:',
+            mirrorErr instanceof Error ? mirrorErr.message : mirrorErr
+          );
+        }
+      }
       await pool.query(
         `UPDATE crm_followup_steps
          SET status = 'sent', sent_at = NOW(), evolution_message_id = $2, error_message = NULL, updated_at = NOW()

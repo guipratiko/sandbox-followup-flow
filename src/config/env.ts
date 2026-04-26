@@ -31,6 +31,8 @@ function normalizeEvolutionBaseUrl(raw: string): string {
 export const env = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: Number(process.env.PORT) || 4337,
+  /** Opcional: mesmo REDIS_URI do backend OnlyFlow — invalida cache do chat após espelhar mensagem. */
+  redisUri: (process.env.REDIS_URI || '').trim(),
   postgresUri: (process.env.POSTGRES_URI || '').trim(),
   jwtSecret: (process.env.JWT_SECRET || '').trim(),
   evolutionBaseUrl: normalizeEvolutionBaseUrl(process.env.EVOLUTION_API_BASE_URL || ''),

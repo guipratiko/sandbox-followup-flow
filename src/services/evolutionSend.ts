@@ -19,9 +19,16 @@ function client(): AxiosInstance {
 export function extractMessageId(data: unknown): string {
   if (!data || typeof data !== 'object') return '';
   const o = data as Record<string, unknown>;
-  const key = o.key as Record<string, unknown> | undefined;
-  if (key && typeof key.id === 'string') return key.id;
-  if (typeof o.messageId === 'string') return o.messageId;
+  const pick = (obj: Record<string, unknown>): string => {
+    const key = obj.key as Record<string, unknown> | undefined;
+    if (key && typeof key.id === 'string' && key.id.trim()) return key.id.trim();
+    if (typeof obj.messageId === 'string' && obj.messageId.trim()) return obj.messageId.trim();
+    return '';
+  };
+  const direct = pick(o);
+  if (direct) return direct;
+  const nested = o.data;
+  if (nested && typeof nested === 'object') return pick(nested as Record<string, unknown>);
   return '';
 }
 
