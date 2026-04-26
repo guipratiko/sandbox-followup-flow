@@ -33,6 +33,10 @@ export const env = {
   PORT: Number(process.env.PORT) || 4337,
   /** Opcional: mesmo REDIS_URI do backend OnlyFlow — invalida cache do chat após espelhar mensagem. */
   redisUri: (process.env.REDIS_URI || '').trim(),
+  /** URL base do backend OnlyFlow (ex.: https://api.seudominio.com) — notificação Socket.IO após espelho. */
+  onlyflowBackendUrl: (process.env.ONLYFLOW_BACKEND_URL || '').trim(),
+  /** Igual a ONLYFLOW_FOLLOWUP_NOTIFY_KEY no backend. */
+  onlyflowFollowupNotifyKey: (process.env.ONLYFLOW_FOLLOWUP_NOTIFY_KEY || '').trim(),
   postgresUri: (process.env.POSTGRES_URI || '').trim(),
   jwtSecret: (process.env.JWT_SECRET || '').trim(),
   evolutionBaseUrl: normalizeEvolutionBaseUrl(process.env.EVOLUTION_API_BASE_URL || ''),

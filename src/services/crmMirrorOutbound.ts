@@ -47,6 +47,49 @@ function buildMirrorPayload(
   }
 }
 
+/** Tenta obter o instante real da mensagem na resposta da Evolution (alinha ordem ao WhatsApp). */
+function parseEvolutionMessageTimestamp(evolutionRaw: unknown): Date | null {
+  if (!evolutionRaw || typeof evolutionRaw !== 'object') return null;
+  const o = evolutionRaw as Record<string, unknown>;
+
+  const fromKey = (key: Record<string, unknown> | undefined): Date | null => {
+    if (!key) return null;
+    const t = key.messageTimestamp ?? key.t;
+    const n = Number(t);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    const ms = n < 1e12 ? n * 1000 : n;
+    return new Date(ms);
+  };
+
+  let d = fromKey(o.key as Record<string, unknown> | undefined);
+  if (d) return d;
+
+  const nested = o.data;
+  if (nested && typeof nested === 'object') {
+    d = fromKey((nested as Record<string, unknown>).key as Record<string, unknown> | undefined);
+    if (d) return d;
+  }
+
+  const top = Number(o.messageTimestamp);
+  if (Number.isFinite(top) && top > 0) {
+    const ms = top < 1e12 ? top * 1000 : top;
+    return new Date(ms);
+  }
+
+  return null;
+}
+
+function resolveMirrorTimestamp(scheduledAt: Date, evolutionRaw: unknown): Date {
+  const fromEvolution = parseEvolutionMessageTimestamp(evolutionRaw);
+  if (fromEvolution && !Number.isNaN(fromEvolution.getTime())) {
+    return fromEvolution;
+  }
+  if (scheduledAt && !Number.isNaN(scheduledAt.getTime())) {
+    return scheduledAt;
+  }
+  return new Date();
+}
+
 /** Mesmo padrão de chaves que o backend usa em MessageService.invalidateCache */
 async function invalidateCrmChatCache(contactId: string): Promise<void> {
   const uri = env.redisUri;
@@ -88,6 +131,10 @@ export async function mirrorFollowupOutboundToMessages(params: {
   evolutionMessageId: string;
   followupMessageType: string;
   payload: Record<string, unknown>;
+  /** Horário agendado da etapa (fallback se a Evolution não devolver messageTimestamp). */
+  scheduledAt: Date;
+  /** Resposta JSON bruta da Evolution após envio (para extrair timestamp real). */
+  evolutionRaw?: unknown;
 }): Promise<void> {
   const mid = String(params.evolutionMessageId ?? '').trim();
   if (!mid) {
@@ -99,7 +146,7 @@ export async function mirrorFollowupOutboundToMessages(params: {
     params.followupMessageType,
     params.payload
   );
-  const ts = new Date();
+  const ts = resolveMirrorTimestamp(params.scheduledAt, params.evolutionRaw);
 
   await params.pool.query(
     `INSERT INTO messages (
@@ -109,6 +156,7 @@ export async function mirrorFollowupOutboundToMessages(params: {
      ) VALUES ($1, $2, $3::uuid, $4, $5, true, $6, $7, $8, $9, true, false, true, '[]'::jsonb)
      ON CONFLICT (message_id, instance_id, contact_id) DO UPDATE SET
        followup_outbound = true,
+       timestamp = EXCLUDED.timestamp,
        updated_at = CURRENT_TIMESTAMP`,
     [
       params.userId,
