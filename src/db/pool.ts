@@ -9,9 +9,6 @@ export function getPool(): Pool {
   }
   if (!pool) {
     pool = new Pool({ connectionString: env.postgresUri, max: 10 });
-    pool.on('connect', (client) => {
-      void client.query('SELECT set_config($1::text, $2::text, false)', ['timezone', env.followupTimezone]);
-    });
   }
   return pool;
 }

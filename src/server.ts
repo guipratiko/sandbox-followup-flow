@@ -1,6 +1,6 @@
+import { env } from './config/env';
 import express, { Router } from 'express';
 import cors from 'cors';
-import { env } from './config/env';
 import healthRoutes from './routes/health';
 import publicStatusRoutes from './routes/publicStatus';
 import sequencesRoutes from './routes/sequences';
@@ -60,9 +60,7 @@ app.use('/', healthRoutes);
 app.use(errorHandler);
 
 app.listen(env.PORT, () => {
-  console.log(
-    `[followup-flow] listening on port ${env.PORT} (${env.NODE_ENV}), timezone=${env.followupTimezone}`
-  );
+  console.log(`[followup-flow] listening on port ${env.PORT} (${env.NODE_ENV})`);
   if (!env.postgresUri) {
     console.warn('[followup-flow] POSTGRES_URI ausente — API e worker não funcionarão.');
   }

@@ -11,8 +11,6 @@ Microserviço **Docker** (EasyPanel) para sequências de mensagens de acompanham
 
 Ver `.env.example`.
 
-- **`FOLLOWUP_TIMEZONE`**: nome IANA (ex. `America/Sao_Paulo`). Define `TZ` no Node e `timezone` em cada conexão Postgres do serviço. O `Dockerfile` já inclui `tzdata` e `TZ` por omissão.
-
 ## Integração OnlyFlow (backend)
 
 No `.env` do backend:

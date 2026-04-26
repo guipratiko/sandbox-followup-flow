@@ -2,30 +2,10 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const DEFAULT_FOLLOWUP_TIMEZONE = 'America/Sao_Paulo';
-
-/**
- * Fuso IANA usado pelo processo Node (`TZ`) e pela sessão Postgres (`SET timezone`),
- * para logs, `NOW()` coerente com o esperado operacional e comparações locais.
- * Prioridade: FOLLOWUP_TIMEZONE → TZ (já definido no host/Docker) → padrão Brasil.
- */
-function resolveFollowupTimezone(): string {
-  const explicit = (process.env.FOLLOWUP_TIMEZONE || '').trim();
-  const fromHost = (process.env.TZ || '').trim();
-  const candidate = explicit || fromHost || DEFAULT_FOLLOWUP_TIMEZONE;
-  if (!/^[\w/+-]+$/.test(candidate)) {
-    return DEFAULT_FOLLOWUP_TIMEZONE;
-  }
-  try {
-    Intl.DateTimeFormat('en-US', { timeZone: candidate }).format(new Date());
-  } catch {
-    return DEFAULT_FOLLOWUP_TIMEZONE;
-  }
-  return candidate;
+/** Fuso do processo Node (alinhado ao Brasil; override com TZ ou APP_TIMEZONE). */
+if (!process.env.TZ?.trim()) {
+  process.env.TZ = (process.env.APP_TIMEZONE || 'America/Sao_Paulo').trim();
 }
-
-const followupTimezone = resolveFollowupTimezone();
-process.env.TZ = followupTimezone;
 
 function parseOrigins(raw: string | undefined): string[] {
   if (!raw?.trim()) return [];
@@ -56,14 +36,12 @@ function normalizeEvolutionBaseUrl(raw: string): string {
 export const env = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: Number(process.env.PORT) || 4337,
-  /** IANA, ex. America/Sao_Paulo — alinha Node (`TZ`) e sessão Postgres. */
-  followupTimezone,
+  /** Base URL do backend OnlyFlow (ex.: https://api.onlyflow.com.br) — notificação Socket após espelhar mensagem. */
+  onlyflowApiBaseUrl: (process.env.ONLYFLOW_API_BASE_URL || '').trim().replace(/\/$/, ''),
+  /** Mesmo segredo que FOLLOWUP_MIRROR_NOTIFY_SECRET no .env do backend. */
+  followupMirrorNotifySecret: (process.env.FOLLOWUP_MIRROR_NOTIFY_SECRET || '').trim(),
   /** Opcional: mesmo REDIS_URI do backend OnlyFlow — invalida cache do chat após espelhar mensagem. */
   redisUri: (process.env.REDIS_URI || '').trim(),
-  /** URL base do backend OnlyFlow (ex.: https://api.seudominio.com) — notificação Socket.IO após espelho. */
-  onlyflowBackendUrl: (process.env.ONLYFLOW_BACKEND_URL || '').trim(),
-  /** Igual a ONLYFLOW_FOLLOWUP_NOTIFY_KEY no backend. */
-  onlyflowFollowupNotifyKey: (process.env.ONLYFLOW_FOLLOWUP_NOTIFY_KEY || '').trim(),
   postgresUri: (process.env.POSTGRES_URI || '').trim(),
   jwtSecret: (process.env.JWT_SECRET || '').trim(),
   evolutionBaseUrl: normalizeEvolutionBaseUrl(process.env.EVOLUTION_API_BASE_URL || ''),
