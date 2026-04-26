@@ -26,7 +26,7 @@ router.get('/status', async (_req: Request, res: Response) => {
       version: packageVersion,
       message: 'Follow-up Flow indisponível: POSTGRES_URI não configurado.',
       timestamp,
-      details: { postgresql: false },
+      details: { postgresql: false, timezone: env.followupTimezone },
     });
     return;
   }
@@ -41,7 +41,7 @@ router.get('/status', async (_req: Request, res: Response) => {
       version: packageVersion,
       message: 'Follow-up Flow API está funcionando',
       timestamp,
-      details: { postgresql: true },
+      details: { postgresql: true, timezone: env.followupTimezone },
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Erro ao consultar Postgres';
@@ -51,7 +51,7 @@ router.get('/status', async (_req: Request, res: Response) => {
       version: packageVersion,
       message: `Follow-up Flow com problemas: ${msg}`,
       timestamp,
-      details: { postgresql: false, error: msg },
+      details: { postgresql: false, error: msg, timezone: env.followupTimezone },
     });
   }
 });

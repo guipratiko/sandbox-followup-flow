@@ -2,6 +2,31 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+const DEFAULT_FOLLOWUP_TIMEZONE = 'America/Sao_Paulo';
+
+/**
+ * Fuso IANA usado pelo processo Node (`TZ`) e pela sessão Postgres (`SET timezone`),
+ * para logs, `NOW()` coerente com o esperado operacional e comparações locais.
+ * Prioridade: FOLLOWUP_TIMEZONE → TZ (já definido no host/Docker) → padrão Brasil.
+ */
+function resolveFollowupTimezone(): string {
+  const explicit = (process.env.FOLLOWUP_TIMEZONE || '').trim();
+  const fromHost = (process.env.TZ || '').trim();
+  const candidate = explicit || fromHost || DEFAULT_FOLLOWUP_TIMEZONE;
+  if (!/^[\w/+-]+$/.test(candidate)) {
+    return DEFAULT_FOLLOWUP_TIMEZONE;
+  }
+  try {
+    Intl.DateTimeFormat('en-US', { timeZone: candidate }).format(new Date());
+  } catch {
+    return DEFAULT_FOLLOWUP_TIMEZONE;
+  }
+  return candidate;
+}
+
+const followupTimezone = resolveFollowupTimezone();
+process.env.TZ = followupTimezone;
+
 function parseOrigins(raw: string | undefined): string[] {
   if (!raw?.trim()) return [];
   return raw
@@ -31,6 +56,8 @@ function normalizeEvolutionBaseUrl(raw: string): string {
 export const env = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: Number(process.env.PORT) || 4337,
+  /** IANA, ex. America/Sao_Paulo — alinha Node (`TZ`) e sessão Postgres. */
+  followupTimezone,
   /** Opcional: mesmo REDIS_URI do backend OnlyFlow — invalida cache do chat após espelhar mensagem. */
   redisUri: (process.env.REDIS_URI || '').trim(),
   /** URL base do backend OnlyFlow (ex.: https://api.seudominio.com) — notificação Socket.IO após espelho. */

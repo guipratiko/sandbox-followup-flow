@@ -60,7 +60,9 @@ app.use('/', healthRoutes);
 app.use(errorHandler);
 
 app.listen(env.PORT, () => {
-  console.log(`[followup-flow] listening on port ${env.PORT} (${env.NODE_ENV})`);
+  console.log(
+    `[followup-flow] listening on port ${env.PORT} (${env.NODE_ENV}), timezone=${env.followupTimezone}`
+  );
   if (!env.postgresUri) {
     console.warn('[followup-flow] POSTGRES_URI ausente — API e worker não funcionarão.');
   }
