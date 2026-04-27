@@ -2,6 +2,7 @@ import { getPool } from './db/pool';
 import { mirrorFollowupOutboundToMessages } from './services/crmMirrorOutbound';
 import { buildPayloadFromStep, evolutionSend, extractMessageId } from './services/evolutionSend';
 import { normalizeEvolutionSendTimestamp } from './utils/whatsappTime';
+import { formatUnknownErrorForStorage } from './utils/formatWorkerError';
 
 const ALLOWED_INTEGRATIONS = new Set<string | null | undefined>([null, undefined, '', 'WHATSAPP-BAILEYS', 'evolution']);
 
@@ -121,10 +122,10 @@ export async function processDueFollowupSteps(): Promise<void> {
       );
       await logEvent(row.sequence_id, row.step_id, 'sent', mid || undefined);
     } catch (e) {
-      const errMsg = e instanceof Error ? e.message : String(e);
+      const errMsg = formatUnknownErrorForStorage(e, 2000);
       await pool.query(
         `UPDATE crm_followup_steps SET status = 'failed', error_message = $2, updated_at = NOW() WHERE id = $1`,
-        [row.step_id, errMsg.slice(0, 2000)]
+        [row.step_id, errMsg]
       );
       await logEvent(row.sequence_id, row.step_id, 'failed', errMsg.slice(0, 500));
     }
