@@ -5,6 +5,9 @@ import { FollowupAuthRequest, jwtAuth } from '../middleware/jwtAuth';
 const router = Router();
 router.use(jwtAuth);
 
+/** Antecedência mínima (ms) entre o relógio do servidor e `scheduledAt` de cada etapa. */
+const SCHEDULE_MIN_LEAD_MS = 60_000;
+
 const MESSAGE_TYPES = new Set([
   'text',
   'image',
@@ -177,6 +180,13 @@ router.post('/sequences', async (req: FollowupAuthRequest, res: Response) => {
         res.status(400).json({ status: 'error', message: `Etapa ${i + 1}: scheduledAt inválido.` });
         return;
       }
+      if (t < Date.now() + SCHEDULE_MIN_LEAD_MS) {
+        res.status(400).json({
+          status: 'error',
+          message: `Etapa ${i + 1}: agende pelo menos 1 minuto à frente do horário atual.`,
+        });
+        return;
+      }
     }
 
     const chk = await client.query(`SELECT id FROM contacts WHERE id = $1 AND user_id = $2`, [body.contactId, tenant]);
@@ -307,8 +317,16 @@ router.put('/sequences/:id', async (req: FollowupAuthRequest, res: Response) => 
         res.status(400).json({ status: 'error', message: `Etapa ${i + 1}: ${err}` });
         return;
       }
-      if (Number.isNaN(Date.parse(st.scheduledAt))) {
+      const ts = Date.parse(st.scheduledAt);
+      if (Number.isNaN(ts)) {
         res.status(400).json({ status: 'error', message: `Etapa ${i + 1}: scheduledAt inválido.` });
+        return;
+      }
+      if (ts < Date.now() + SCHEDULE_MIN_LEAD_MS) {
+        res.status(400).json({
+          status: 'error',
+          message: `Etapa ${i + 1}: agende pelo menos 1 minuto à frente do horário atual.`,
+        });
         return;
       }
     }
