@@ -159,6 +159,14 @@ router.post('/sequences', async (req: FollowupAuthRequest, res: Response) => {
       });
       return;
     }
+    if (body.remoteJid.trim().toLowerCase().endsWith('@instagram.dm')) {
+      res.status(400).json({
+        status: 'error',
+        message:
+          'Follow-up automático só envia via Evolution (WhatsApp). Não é possível criar sequência para contato Instagram Direct.',
+      });
+      return;
+    }
     if (!Array.isArray(body.steps) || body.steps.length === 0) {
       res.status(400).json({ status: 'error', message: 'Informe ao menos uma etapa.' });
       return;

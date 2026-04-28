@@ -91,15 +91,30 @@ export async function evolutionSend(instanceName: string, number: string, payloa
   if (res.status >= 400) {
     const d = res.data;
     let msg = `Evolution HTTP ${res.status}`;
-    if (d && typeof d === 'object') {
+    const stringifyMsg = (v: unknown): string | null => {
+      if (typeof v === 'string' && v.trim()) return v.trim();
+      if (Array.isArray(v)) return v.map((x) => (typeof x === 'object' && x !== null ? JSON.stringify(x) : String(x))).join('; ');
+      if (v && typeof v === 'object') {
+        try {
+          return JSON.stringify(v).slice(0, 1500);
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    };
+    if (d && typeof d === 'object' && !Array.isArray(d)) {
       const o = d as Record<string, unknown>;
-      if (typeof o.message === 'string') msg = o.message;
-      else if (Array.isArray(o.message)) msg = o.message.map(String).join(' ');
+      const fromRoot = stringifyMsg(o.message);
+      if (fromRoot) msg = fromRoot;
       else if (o.response && typeof o.response === 'object') {
         const r = o.response as Record<string, unknown>;
-        if (Array.isArray(r.message)) msg = r.message.map(String).join(' ');
-        else if (typeof r.message === 'string') msg = r.message;
+        const fromResp = stringifyMsg(r.message);
+        if (fromResp) msg = fromResp;
       }
+    } else if (d != null) {
+      const s = stringifyMsg(d);
+      if (s) msg = s;
     }
     if (res.status === 404) {
       msg += ` (instância «${instanceName}» — na Evolution use o nome interno da instância, não o nome de exibição)`;

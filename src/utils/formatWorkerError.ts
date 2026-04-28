@@ -1,31 +1,19 @@
 /**
- * Converte falhas do worker em texto persistível (evita "[object Object]" em error_message / eventos).
+ * Converte qualquer valor lançado no worker numa mensagem legível (evita "[object Object]" em DB/UI).
  */
-export function formatUnknownErrorForStorage(e: unknown, maxLen = 2000): string {
-  if (e instanceof Error) return e.message.slice(0, maxLen);
-  if (typeof e === 'string') return e.slice(0, maxLen);
-  if (e && typeof e === 'object') {
-    const o = e as Record<string, unknown>;
-    if (typeof o.message === 'string' && o.message.trim()) return o.message.slice(0, maxLen);
-    if (typeof o.error === 'string' && o.error.trim()) return o.error.slice(0, maxLen);
-    const resp = o.response;
-    if (resp && typeof resp === 'object') {
-      const r = resp as Record<string, unknown>;
-      const data = r.data;
-      if (typeof data === 'string') return data.slice(0, maxLen);
-      if (data && typeof data === 'object') {
-        try {
-          return JSON.stringify(data).slice(0, maxLen);
-        } catch {
-          /* fall through */
-        }
-      }
-    }
+export function formatWorkerError(err: unknown): string {
+  if (err instanceof Error && err.message.trim()) {
+    return err.message.trim().slice(0, 2000);
+  }
+  if (typeof err === 'string') return err.trim().slice(0, 2000);
+  if (err && typeof err === 'object') {
+    const o = err as Record<string, unknown>;
+    if (typeof o.message === 'string' && o.message.trim()) return o.message.trim().slice(0, 2000);
     try {
-      return JSON.stringify(e).slice(0, maxLen);
+      return JSON.stringify(err).slice(0, 2000);
     } catch {
-      return 'Erro desconhecido (não serializável)';
+      return String(err).slice(0, 2000);
     }
   }
-  return String(e).slice(0, maxLen);
+  return String(err).slice(0, 2000);
 }
