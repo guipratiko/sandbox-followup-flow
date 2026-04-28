@@ -1,8 +1,12 @@
 import { getPool } from './db/pool';
 import { mirrorFollowupOutboundToMessages } from './services/crmMirrorOutbound';
-import { buildPayloadFromStep, evolutionSend, extractMessageId } from './services/evolutionSend';
+import {
+  buildPayloadFromStep,
+  evolutionSend,
+  evolutionSendFollowupWithBrazilVariantRetry,
+  extractMessageId,
+} from './services/evolutionSend';
 import { normalizeEvolutionSendTimestamp } from './utils/whatsappTime';
-import { formatWorkerError } from './utils/formatWorkerError';
 
 const ALLOWED_INTEGRATIONS = new Set<string | null | undefined>([null, undefined, '', 'WHATSAPP-BAILEYS', 'evolution']);
 
@@ -10,18 +14,14 @@ async function logEvent(
   sequenceId: string,
   stepId: string | null,
   eventType: string,
-  detail?: unknown,
+  detail?: string,
   meta?: unknown
 ): Promise<void> {
   const pool = getPool();
-  let detailText: string | null = null;
-  if (detail != null && detail !== '') {
-    detailText = typeof detail === 'string' ? detail : formatWorkerError(detail);
-  }
   await pool.query(
     `INSERT INTO crm_followup_events (sequence_id, step_id, event_type, detail, meta)
      VALUES ($1, $2, $3, $4, $5::jsonb)`,
-    [sequenceId, stepId, eventType, detailText, meta ? JSON.stringify(meta) : null]
+    [sequenceId, stepId, eventType, detail ?? null, meta ? JSON.stringify(meta) : null]
   );
 }
 
@@ -93,21 +93,11 @@ export async function processDueFollowupSteps(): Promise<void> {
       continue;
     }
 
-    if (row.remote_jid.toLowerCase().endsWith('@instagram.dm')) {
-      const igMsg =
-        'Follow-up automático só envia via Evolution (WhatsApp). Contatos Instagram Direct não são suportados nesta fila.';
-      await pool.query(
-        `UPDATE crm_followup_steps SET status = 'failed', error_message = $2, updated_at = NOW() WHERE id = $1`,
-        [row.step_id, igMsg]
-      );
-      await logEvent(row.sequence_id, row.step_id, 'failed', igMsg);
-      await maybeCompleteSequence(row.sequence_id);
-      continue;
-    }
-
     try {
       const sendPayload = buildPayloadFromStep(row.message_type, row.payload);
-      const raw = await evolutionSend(row.instance_name, row.remote_jid, sendPayload);
+      const raw = row.remote_jid.toLowerCase().endsWith('@s.whatsapp.net')
+        ? await evolutionSendFollowupWithBrazilVariantRetry(row.instance_name, row.remote_jid, sendPayload)
+        : await evolutionSend(row.instance_name, row.remote_jid, sendPayload);
       const mid = extractMessageId(raw);
       const sentAt = normalizeEvolutionSendTimestamp(raw);
       if (mid) {
@@ -138,7 +128,7 @@ export async function processDueFollowupSteps(): Promise<void> {
       );
       await logEvent(row.sequence_id, row.step_id, 'sent', mid || undefined);
     } catch (e) {
-      const errMsg = formatWorkerError(e);
+      const errMsg = e instanceof Error ? e.message : String(e);
       await pool.query(
         `UPDATE crm_followup_steps SET status = 'failed', error_message = $2, updated_at = NOW() WHERE id = $1`,
         [row.step_id, errMsg.slice(0, 2000)]
