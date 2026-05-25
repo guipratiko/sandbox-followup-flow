@@ -19,11 +19,12 @@ export function jwtAuth(req: Request, res: Response, next: NextFunction): void {
   }
   const token = h.slice(7).trim();
   try {
-    const decoded = jwt.verify(token, env.jwtSecret) as { id: string };
+    const decoded = jwt.verify(token, env.jwtSecret) as { id: string; effectiveUserId?: string };
     const r = req as FollowupAuthRequest;
     r.jwtUserId = decoded.id;
-    const eff = (req.headers['x-effective-user-id'] as string | undefined)?.trim();
-    r.tenantUserId = eff || decoded.id;
+    const headerEff = (req.headers['x-effective-user-id'] as string | undefined)?.trim();
+    const tokenEff = typeof decoded.effectiveUserId === 'string' ? decoded.effectiveUserId.trim() : '';
+    r.tenantUserId = headerEff || tokenEff || decoded.id;
     next();
   } catch {
     res.status(401).json({ status: 'error', message: 'Token inválido ou expirado.' });

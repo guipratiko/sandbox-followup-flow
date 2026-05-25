@@ -36,8 +36,16 @@ function normalizeEvolutionBaseUrl(raw: string): string {
 export const env = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: Number(process.env.PORT) || 4337,
-  /** Base URL do backend OnlyFlow (ex.: https://api.onlyflow.com.br) — notificação Socket após espelhar mensagem. */
-  onlyflowApiBaseUrl: (process.env.ONLYFLOW_API_BASE_URL || '').trim().replace(/\/$/, ''),
+  /** Base URL do backend OnlyFlow (ex.: https://api.onlyflow.com.br). */
+  onlyflowApiBaseUrl: (
+    process.env.ONLYFLOW_API_BASE_URL ||
+    process.env.BACKEND_URL ||
+    ''
+  )
+    .trim()
+    .replace(/\/$/, ''),
+  /** Deve ser igual a ONLYFLOW_INTERNAL_KEY no Backend — não usar JWT_SECRET em produção. */
+  onlyflowInternalKey: (process.env.ONLYFLOW_INTERNAL_KEY || '').trim(),
   /** Mesmo segredo que FOLLOWUP_MIRROR_NOTIFY_SECRET no .env do backend. */
   followupMirrorNotifySecret: (process.env.FOLLOWUP_MIRROR_NOTIFY_SECRET || '').trim(),
   /** Opcional: mesmo REDIS_URI do backend OnlyFlow — invalida cache do chat após espelhar mensagem. */

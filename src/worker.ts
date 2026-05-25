@@ -7,6 +7,9 @@ import {
   extractMessageId,
 } from './services/evolutionSend';
 import { normalizeEvolutionSendTimestamp } from './utils/whatsappTime';
+import { tryScheduleNextRecurrenceCycle } from './services/recurrence';
+import { checkUserAutomationPlan } from './services/onlyflowPlanCheck';
+import { applyVariablesToFollowupPayload } from './utils/variableReplacer';
 
 const ALLOWED_INTEGRATIONS = new Set<string | null | undefined>([null, undefined, '', 'WHATSAPP-BAILEYS', 'evolution']);
 
@@ -37,6 +40,7 @@ async function claimOneStep(): Promise<{
   user_id: string;
   contact_id: string;
   instance_id: string;
+  contact_name: string | null;
 } | null> {
   const pool = getPool();
   const { rows } = await pool.query<{
@@ -50,11 +54,13 @@ async function claimOneStep(): Promise<{
     user_id: string;
     contact_id: string;
     instance_id: string;
+    contact_name: string | null;
   }>(
     `WITH picked AS (
        SELECT s.id AS step_id, s.sequence_id, s.message_type, s.payload,
               seq.instance_name, seq.remote_jid, seq.instance_integration,
-              seq.user_id::text AS user_id, seq.contact_id::text AS contact_id, seq.instance_id::text AS instance_id
+              seq.user_id::text AS user_id, seq.contact_id::text AS contact_id, seq.instance_id::text AS instance_id,
+              seq.contact_name
        FROM crm_followup_steps s
        INNER JOIN crm_followup_sequences seq ON seq.id = s.sequence_id
        WHERE s.status = 'pending'
@@ -70,7 +76,7 @@ async function claimOneStep(): Promise<{
      WHERE s.id = picked.step_id
      RETURNING s.id AS step_id, picked.sequence_id, picked.message_type, picked.payload,
                picked.instance_name, picked.remote_jid, picked.instance_integration,
-               picked.user_id, picked.contact_id, picked.instance_id`
+               picked.user_id, picked.contact_id, picked.instance_id, picked.contact_name`
   );
   return rows[0] ?? null;
 }
@@ -80,6 +86,33 @@ export async function processDueFollowupSteps(): Promise<void> {
   for (let n = 0; n < 40; n++) {
     const row = await claimOneStep();
     if (!row) break;
+
+    const planCheck = await checkUserAutomationPlan(row.user_id);
+    if (!planCheck.ok) {
+      if (planCheck.reason === 'free_plan') {
+        await pool.query(
+          `UPDATE crm_followup_steps SET status = 'cancelled', error_message = $2, updated_at = NOW() WHERE id = $1`,
+          [row.step_id, 'Plano free: follow-up cancelado.']
+        );
+        await pool.query(
+          `UPDATE crm_followup_sequences SET status = 'cancelled', updated_at = NOW() WHERE id = $1 AND status = 'active'`,
+          [row.sequence_id]
+        );
+        await logEvent(row.sequence_id, row.step_id, 'cancelled', 'plan_free');
+      } else {
+        const msg =
+          planCheck.reason === 'config_missing'
+            ? 'Serviço de follow-up sem configuração de plano (ONLYFLOW_API_BASE_URL / ONLYFLOW_INTERNAL_KEY).'
+            : `Falha ao verificar plano: ${planCheck.detail}`;
+        await pool.query(
+          `UPDATE crm_followup_steps SET status = 'pending', error_message = $2, updated_at = NOW() WHERE id = $1`,
+          [row.step_id, msg.slice(0, 2000)]
+        );
+        await logEvent(row.sequence_id, row.step_id, 'plan_check_failed', msg.slice(0, 500));
+        console.error(`[followup-flow] Verificação de plano não concluída (user=${row.user_id}): ${msg}`);
+      }
+      continue;
+    }
 
     if (!ALLOWED_INTEGRATIONS.has(row.instance_integration)) {
       await pool.query(
@@ -94,7 +127,11 @@ export async function processDueFollowupSteps(): Promise<void> {
     }
 
     try {
-      const sendPayload = buildPayloadFromStep(row.message_type, row.payload);
+      const resolvedPayload = applyVariablesToFollowupPayload(row.payload, {
+        name: row.contact_name,
+        remoteJid: row.remote_jid,
+      });
+      const sendPayload = buildPayloadFromStep(row.message_type, resolvedPayload);
       const raw = row.remote_jid.toLowerCase().endsWith('@s.whatsapp.net')
         ? await evolutionSendFollowupWithBrazilVariantRetry(row.instance_name, row.remote_jid, sendPayload)
         : await evolutionSend(row.instance_name, row.remote_jid, sendPayload);
@@ -110,7 +147,7 @@ export async function processDueFollowupSteps(): Promise<void> {
             remoteJid: row.remote_jid,
             evolutionMessageId: mid,
             followupMessageType: row.message_type,
-            payload: row.payload,
+            payload: resolvedPayload,
             sentAt,
           });
         } catch (mirrorErr) {
@@ -146,13 +183,19 @@ async function maybeCompleteSequence(sequenceId: string): Promise<void> {
     `SELECT COUNT(*)::text AS c FROM crm_followup_steps WHERE sequence_id = $1 AND status IN ('pending','processing')`,
     [sequenceId]
   );
-  if (rows[0]?.c === '0') {
-    await pool.query(
-      `UPDATE crm_followup_sequences SET status = 'completed', updated_at = NOW() WHERE id = $1 AND status = 'active'`,
-      [sequenceId]
-    );
-    await logEvent(sequenceId, null, 'sequence_completed');
+  if (rows[0]?.c !== '0') return;
+
+  const recurred = await tryScheduleNextRecurrenceCycle(pool, sequenceId);
+  if (recurred) {
+    await logEvent(sequenceId, null, 'cycle_recurred', 'Próximo ciclo de follow-up agendado.');
+    return;
   }
+
+  await pool.query(
+    `UPDATE crm_followup_sequences SET status = 'completed', updated_at = NOW() WHERE id = $1 AND status = 'active'`,
+    [sequenceId]
+  );
+  await logEvent(sequenceId, null, 'sequence_completed');
 }
 
 export function startFollowupWorker(): NodeJS.Timeout {
