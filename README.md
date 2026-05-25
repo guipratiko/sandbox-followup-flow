@@ -9,7 +9,16 @@ Microserviço **Docker** (EasyPanel) para sequências de mensagens de acompanham
 
 ## Variáveis de ambiente
 
-Ver `.env.example`.
+Ver `.env.example`. **Obrigatório para o worker:**
+
+| Variável | Descrição |
+|----------|-----------|
+| `POSTGRES_URI` | Mesmo Postgres do backend |
+| `JWT_SECRET` | Mesmo JWT do backend |
+| `ONLYFLOW_API_BASE_URL` | URL do backend (ex. `https://back-sandbox.onlyflow.com.br`) |
+| `EVOLUTION_API_BASE_URL` + `EVOLUTION_API_KEY` | Envio WhatsApp |
+
+`ONLYFLOW_INTERNAL_KEY` é opcional se for igual ao `JWT_SECRET` (padrão do monorepo).
 
 ## Integração OnlyFlow (backend)
 

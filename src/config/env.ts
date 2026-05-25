@@ -33,27 +33,37 @@ function normalizeEvolutionBaseUrl(raw: string): string {
   }
 }
 
-export const env = {
-  NODE_ENV: process.env.NODE_ENV || 'development',
-  PORT: Number(process.env.PORT) || 4337,
-  /** Base URL do backend OnlyFlow (ex.: https://api.onlyflow.com.br). */
-  onlyflowApiBaseUrl: (
+function resolveOnlyflowApiBaseUrl(): string {
+  const explicit = (
     process.env.ONLYFLOW_API_BASE_URL ||
     process.env.BACKEND_URL ||
+    process.env.BACKEND_PUBLIC_URL ||
     ''
   )
     .trim()
-    .replace(/\/$/, ''),
-  /** Deve ser igual a ONLYFLOW_INTERNAL_KEY no Backend — não usar JWT_SECRET em produção. */
-  onlyflowInternalKey: (process.env.ONLYFLOW_INTERNAL_KEY || '').trim(),
+    .replace(/\/$/, '');
+  if (explicit) return explicit;
+  const port = (process.env.ONLYFLOW_BACKEND_PORT || process.env.BACKEND_PORT || '4331').trim();
+  return `http://127.0.0.1:${port}`;
+}
+
+export const env = {
+  NODE_ENV: process.env.NODE_ENV || 'development',
+  PORT: Number(process.env.PORT) || 4337,
+  /** Base URL do backend OnlyFlow — rota interna /api/internal/users/:id/automation-eligible */
+  onlyflowApiBaseUrl: resolveOnlyflowApiBaseUrl(),
+  /** Igual a ONLYFLOW_INTERNAL_KEY no Backend (fallback: JWT_SECRET, como no Backend). */
+  onlyflowInternalKey: (process.env.ONLYFLOW_INTERNAL_KEY || process.env.JWT_SECRET || '').trim(),
   /** Mesmo segredo que FOLLOWUP_MIRROR_NOTIFY_SECRET no .env do backend. */
   followupMirrorNotifySecret: (process.env.FOLLOWUP_MIRROR_NOTIFY_SECRET || '').trim(),
   /** Opcional: mesmo REDIS_URI do backend OnlyFlow — invalida cache do chat após espelhar mensagem. */
   redisUri: (process.env.REDIS_URI || '').trim(),
   postgresUri: (process.env.POSTGRES_URI || '').trim(),
   jwtSecret: (process.env.JWT_SECRET || '').trim(),
-  evolutionBaseUrl: normalizeEvolutionBaseUrl(process.env.EVOLUTION_API_BASE_URL || ''),
-  evolutionApiKey: (process.env.EVOLUTION_API_KEY || '').trim(),
+  evolutionBaseUrl: normalizeEvolutionBaseUrl(
+    process.env.EVOLUTION_API_BASE_URL || process.env.EVOLUTION_HOST || ''
+  ),
+  evolutionApiKey: (process.env.EVOLUTION_API_KEY || process.env.EVOLUTION_APIKEY || '').trim(),
   evolutionInsecureTls: process.env.EVOLUTION_INSECURE_TLS === 'true',
   corsOrigins: parseOrigins(process.env.CORS_ORIGINS),
 };
