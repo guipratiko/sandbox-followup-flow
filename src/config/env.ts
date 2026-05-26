@@ -43,6 +43,8 @@ function resolveOnlyflowApiBaseUrl(): string {
     .trim()
     .replace(/\/$/, '');
   if (explicit) return explicit;
+  const nodeEnv = (process.env.NODE_ENV || 'development').trim().toLowerCase();
+  if (nodeEnv === 'production') return '';
   const port = (process.env.ONLYFLOW_BACKEND_PORT || process.env.BACKEND_PORT || '4331').trim();
   return `http://127.0.0.1:${port}`;
 }

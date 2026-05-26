@@ -67,6 +67,13 @@ app.listen(env.PORT, () => {
   if (!env.evolutionBaseUrl) {
     console.warn('[followup-flow] EVOLUTION_API_BASE_URL ausente — envios falharão.');
   }
+  if (!env.onlyflowApiBaseUrl) {
+    console.warn(
+      '[followup-flow] ONLYFLOW_API_BASE_URL ausente — verificação de plano falhará (defina a URL pública do backend).'
+    );
+  } else {
+    console.log(`[followup-flow] ONLYFLOW_API_BASE_URL=${env.onlyflowApiBaseUrl}`);
+  }
   setTimeout(() => void processDueFollowupSteps(), 5000);
   startFollowupWorker();
 });

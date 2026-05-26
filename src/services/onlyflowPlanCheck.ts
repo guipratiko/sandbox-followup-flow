@@ -26,6 +26,9 @@ export async function checkUserAutomationPlan(userId: string): Promise<Automatio
   const key = env.onlyflowInternalKey;
   if (!base || !key) {
     console.warn(
+      `[followup-flow] ONLYFLOW_API_BASE_URL=${base || '(vazio)'} ONLYFLOW_INTERNAL_KEY/JWT=${key ? 'ok' : 'ausente'}`
+    );
+    console.warn(
       '[followup-flow] ONLYFLOW_API_BASE_URL ou ONLYFLOW_INTERNAL_KEY ausente — não é possível verificar plano.'
     );
     return { ok: false, reason: 'config_missing' };
