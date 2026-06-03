@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { getPool } from '../db/pool';
 import { FollowupAuthRequest, jwtAuth } from '../middleware/jwtAuth';
 import { parseFollowupRecurrence, type FollowupRecurrence } from '../services/recurrence';
+import { resolveContactIdForTenant } from '../services/resolveContact';
 
 const router = Router();
 router.use(jwtAuth);
@@ -220,9 +221,20 @@ router.post('/sequences', async (req: FollowupAuthRequest, res: Response) => {
       }
     }
 
-    const chk = await client.query(`SELECT id FROM contacts WHERE id = $1 AND user_id = $2`, [body.contactId, tenant]);
-    if (!chk.rows.length) {
-      res.status(404).json({ status: 'error', message: 'Contato não encontrado.' });
+    const resolvedContactId = await resolveContactIdForTenant(
+      client,
+      tenant,
+      body.contactId,
+      body.instanceId,
+      body.remoteJid
+    );
+    if (!resolvedContactId) {
+      res.status(404).json({
+        status: 'error',
+        code: 'contact_not_found',
+        message:
+          'Contato não encontrado no CRM. Abra o chat do contato uma vez ou verifique instância e número.',
+      });
       return;
     }
 
@@ -230,7 +242,7 @@ router.post('/sequences', async (req: FollowupAuthRequest, res: Response) => {
       `SELECT id FROM crm_followup_sequences
        WHERE contact_id = $1 AND user_id = $2 AND status IN ('active', 'paused')
        LIMIT 1`,
-      [body.contactId, tenant]
+      [resolvedContactId, tenant]
     );
     if (activeSeq.rows.length) {
       res.status(409).json({
@@ -249,7 +261,7 @@ router.post('/sequences', async (req: FollowupAuthRequest, res: Response) => {
        RETURNING id`,
       [
         tenant,
-        body.contactId,
+        resolvedContactId,
         body.instanceId,
         body.remoteJid.trim(),
         body.instanceName.trim(),

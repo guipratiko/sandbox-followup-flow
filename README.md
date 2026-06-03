@@ -26,6 +26,7 @@ No `.env` do backend:
 
 ```env
 FOLLOWUP_FLOW_SERVICE_URL=https://seu-followup-flow.easypanel.host
+# (sem /api no final — o proxy monta /api/followup-flow/...)
 ```
 
 O proxy expõe ` /api/followup-flow/*` com autenticação e módulo CRM.
