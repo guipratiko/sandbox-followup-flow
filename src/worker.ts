@@ -6,12 +6,21 @@ import {
   evolutionSendFollowupWithBrazilVariantRetry,
   extractMessageId,
 } from './services/evolutionSend';
+import { fetchInstanceWhatsappCredentials } from './utils/onlyflowInstanceCredentials';
 import { normalizeEvolutionSendTimestamp } from './utils/whatsappTime';
 import { tryScheduleNextRecurrenceCycle } from './services/recurrence';
 import { checkUserAutomationPlan } from './services/onlyflowPlanCheck';
 import { applyVariablesToFollowupPayload } from './utils/variableReplacer';
 
-const ALLOWED_INTEGRATIONS = new Set<string | null | undefined>([null, undefined, '', 'WHATSAPP-BAILEYS', 'evolution']);
+const ALLOWED_INTEGRATIONS = new Set<string | null | undefined>([
+  null,
+  undefined,
+  '',
+  'WHATSAPP-GO',
+  'WHATSAPP-BAILEYS',
+  'evolution',
+  'EVOLUTION',
+]);
 
 async function logEvent(
   sequenceId: string,
@@ -117,7 +126,7 @@ export async function processDueFollowupSteps(): Promise<void> {
     if (!ALLOWED_INTEGRATIONS.has(row.instance_integration)) {
       await pool.query(
         `UPDATE crm_followup_steps SET status = 'failed', error_message = $2, updated_at = NOW() WHERE id = $1`,
-        [row.step_id, 'Instância não suportada para envio automático (use Evolution / Baileys).']
+        [row.step_id, 'Instância não suportada para envio automático (use WHATSAPP-GO).']
       );
       await logEvent(row.sequence_id, row.step_id, 'failed', 'integration_not_supported', {
         integration: row.instance_integration,
@@ -132,9 +141,14 @@ export async function processDueFollowupSteps(): Promise<void> {
         remoteJid: row.remote_jid,
       });
       const sendPayload = buildPayloadFromStep(row.message_type, resolvedPayload);
+      const creds = await fetchInstanceWhatsappCredentials(row.instance_id);
+      const instanceToken = creds?.token?.trim();
+      if (!instanceToken) {
+        throw new Error('Instância sem token Evolution GO. Reconecte a instância no painel.');
+      }
       const raw = row.remote_jid.toLowerCase().endsWith('@s.whatsapp.net')
-        ? await evolutionSendFollowupWithBrazilVariantRetry(row.instance_name, row.remote_jid, sendPayload)
-        : await evolutionSend(row.instance_name, row.remote_jid, sendPayload);
+        ? await evolutionSendFollowupWithBrazilVariantRetry(instanceToken, row.remote_jid, sendPayload)
+        : await evolutionSend(instanceToken, row.remote_jid, sendPayload);
       const mid = extractMessageId(raw);
       const sentAt = normalizeEvolutionSendTimestamp(raw);
       if (mid) {
